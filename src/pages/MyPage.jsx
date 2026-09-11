@@ -5,54 +5,81 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../hooks/useAuth.jsx';
 import PostCard from '../components/ui/PostCard.jsx';
+import UserListItem from '../components/ui/UserListItem.jsx';
+import FollowButton from '../components/ui/FollowButton.jsx';
+
+function mapPost(row) {
+  return {
+    post_id: row.post_id,
+    title: row.title,
+    category: row.category,
+    like_count: row.like_count,
+    comment_count: row.comment_count,
+    created_at: row.created_at,
+    authorNickname: row.author_nickname,
+    authorId: row.user_id,
+    tags: row.tags ?? [],
+  };
+}
 
 /**
  * MyPage 컴포넌트
  *
- * 프로필 카드와 내가 작성한 게시글 목록을 보여준다.
+ * 프로필 카드와 내가 작성한 게시글 / 팔로잉 / 팔로워 목록을 탭으로 보여준다.
  *
  * Example usage:
  * <MyPage />
  */
 function MyPage() {
   const { user, profile } = useAuth();
+  const [tab, setTab] = useState('posts');
   const [posts, setPosts] = useState([]);
+  const [following, setFollowing] = useState([]);
+  const [followers, setFollowers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
 
-    async function loadMyPosts() {
-      const { data } = await supabase
-        .from('DV_POSTS')
-        .select(
-          'post_id, title, category, like_count, comment_count, created_at, DV_USERS(nickname), DV_POST_TAGS(DV_TAGS(name))',
-        )
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+    async function loadAll() {
+      setIsLoading(true);
+      const [postsRes, followingRes, followersRes] = await Promise.all([
+        supabase.rpc('dv_search_posts', { p_user_id: user.id, p_limit: 50, p_offset: 0 }),
+        supabase
+          .from('DV_FOLLOWS')
+          .select('following_id, DV_USERS!DV_FOLLOWS_following_id_fkey(nickname)')
+          .eq('follower_id', user.id),
+        supabase
+          .from('DV_FOLLOWS')
+          .select('follower_id, DV_USERS!DV_FOLLOWS_follower_id_fkey(nickname)')
+          .eq('following_id', user.id),
+      ]);
 
-      setPosts(
-        (data ?? []).map((row) => ({
-          post_id: row.post_id,
-          title: row.title,
-          category: row.category,
-          like_count: row.like_count,
-          comment_count: row.comment_count,
-          created_at: row.created_at,
-          authorNickname: row.DV_USERS?.nickname ?? profile?.nickname,
-          tags: (row.DV_POST_TAGS ?? []).map((postTag) => postTag.DV_TAGS?.name).filter(Boolean),
+      setPosts((postsRes.data ?? []).map(mapPost));
+      setFollowing(
+        (followingRes.data ?? []).map((row) => ({
+          userId: row.following_id,
+          nickname: row.DV_USERS?.nickname ?? '알 수 없음',
+        })),
+      );
+      setFollowers(
+        (followersRes.data ?? []).map((row) => ({
+          userId: row.follower_id,
+          nickname: row.DV_USERS?.nickname ?? '알 수 없음',
         })),
       );
       setIsLoading(false);
     }
 
-    loadMyPosts();
-  }, [user, profile?.nickname]);
+    loadAll();
+  }, [user]);
 
   return (
     <Box sx={{ flex: 1, py: { xs: 3, md: 5 } }}>
@@ -79,24 +106,52 @@ function MyPage() {
           </Box>
         </Paper>
 
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          내가 쓴 글
-        </Typography>
+        <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
+          <Tab value="posts" label={`내가 쓴 글 (${posts.length})`} />
+          <Tab value="following" label={`팔로잉 (${following.length})`} />
+          <Tab value="followers" label={`팔로워 (${followers.length})`} />
+        </Tabs>
 
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress size={24} />
           </Box>
-        ) : posts.length === 0 ? (
+        ) : tab === 'posts' ? (
+          posts.length === 0 ? (
+            <Typography variant="body2" sx={{ color: 'text.secondary', py: 4 }}>
+              아직 작성한 게시글이 없습니다.
+            </Typography>
+          ) : (
+            <Stack spacing={2}>
+              {posts.map((post) => (
+                <PostCard key={post.post_id} post={post} />
+              ))}
+            </Stack>
+          )
+        ) : tab === 'following' ? (
+          following.length === 0 ? (
+            <Typography variant="body2" sx={{ color: 'text.secondary', py: 4 }}>
+              아직 팔로우한 사람이 없습니다.
+            </Typography>
+          ) : (
+            <Box>
+              {following.map((item) => (
+                <UserListItem key={item.userId} userId={item.userId} nickname={item.nickname}>
+                  <FollowButton targetUserId={item.userId} isInitiallyFollowing />
+                </UserListItem>
+              ))}
+            </Box>
+          )
+        ) : followers.length === 0 ? (
           <Typography variant="body2" sx={{ color: 'text.secondary', py: 4 }}>
-            아직 작성한 게시글이 없습니다.
+            아직 팔로워가 없습니다.
           </Typography>
         ) : (
-          <Stack spacing={2}>
-            {posts.map((post) => (
-              <PostCard key={post.post_id} post={post} />
+          <Box>
+            {followers.map((item) => (
+              <UserListItem key={item.userId} userId={item.userId} nickname={item.nickname} />
             ))}
-          </Stack>
+          </Box>
         )}
       </Container>
     </Box>

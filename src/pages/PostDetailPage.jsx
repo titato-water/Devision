@@ -7,6 +7,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
+import Link from '@mui/material/Link';
 import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
 import { supabase } from '../lib/supabase.js';
@@ -40,7 +41,7 @@ function PostDetailPage() {
     const { data: postRow } = await supabase
       .from('DV_POSTS')
       .select(
-        'post_id, user_id, title, content, category, like_count, comment_count, created_at, DV_USERS(nickname), DV_POST_TAGS(DV_TAGS(name))',
+        'post_id, user_id, title, content, category, like_count, comment_count, created_at, DV_USERS!DV_POSTS_user_id_fkey(nickname), DV_POST_TAGS(DV_TAGS(name))',
       )
       .eq('post_id', id)
       .maybeSingle();
@@ -57,7 +58,7 @@ function PostDetailPage() {
 
     const { data: commentRows } = await supabase
       .from('DV_COMMENTS')
-      .select('comment_id, user_id, content, created_at, DV_USERS(nickname)')
+      .select('comment_id, user_id, parent_comment_id, content, created_at, DV_USERS(nickname)')
       .eq('post_id', id)
       .order('created_at', { ascending: true });
 
@@ -91,16 +92,21 @@ function PostDetailPage() {
     navigate('/');
   }
 
-  async function handleAddComment(content) {
+  async function handleAddComment(content, parentCommentId = null) {
     if (!user) {
       navigate('/login');
       return;
     }
-    setIsCommenting(true);
+    if (!parentCommentId) setIsCommenting(true);
     const { data, error } = await supabase
       .from('DV_COMMENTS')
-      .insert({ post_id: Number(id), user_id: user.id, content })
-      .select('comment_id, user_id, content, created_at')
+      .insert({
+        post_id: Number(id),
+        user_id: user.id,
+        content,
+        parent_comment_id: parentCommentId,
+      })
+      .select('comment_id, user_id, parent_comment_id, content, created_at')
       .single();
     if (!error && data) {
       setComments((prev) => [
@@ -108,7 +114,11 @@ function PostDetailPage() {
         { ...data, authorNickname: profile?.nickname ?? '나' },
       ]);
     }
-    setIsCommenting(false);
+    if (!parentCommentId) setIsCommenting(false);
+  }
+
+  function handleReplyComment(parentCommentId, content) {
+    return handleAddComment(content, parentCommentId);
   }
 
   async function handleDeleteComment(commentId) {
@@ -141,9 +151,25 @@ function PostDetailPage() {
     <Box sx={{ flex: 1, py: { xs: 3, md: 5 } }}>
       <Container maxWidth="md">
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
-          <Chip label={post.category} size="small" color="primary" variant="outlined" />
+          <Chip
+            label={post.category}
+            size="small"
+            color="primary"
+            variant="outlined"
+            component={RouterLink}
+            to={`/?category=${encodeURIComponent(post.category)}`}
+            clickable
+          />
           {post.tags.map((tag) => (
-            <Chip key={tag} label={tag} size="small" variant="outlined" />
+            <Chip
+              key={tag}
+              label={tag}
+              size="small"
+              variant="outlined"
+              component={RouterLink}
+              to={`/?tag=${encodeURIComponent(tag)}`}
+              clickable
+            />
           ))}
         </Stack>
 
@@ -162,7 +188,15 @@ function PostDetailPage() {
           }}
         >
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {post.authorNickname} · {formatDate(post.created_at)}
+            <Link
+              component={RouterLink}
+              to={`/users/${post.user_id}`}
+              underline="hover"
+              sx={{ color: 'text.secondary' }}
+            >
+              {post.authorNickname}
+            </Link>{' '}
+            · {formatDate(post.created_at)}
           </Typography>
           {isOwner && (
             <Stack direction="row" spacing={1}>
@@ -187,7 +221,12 @@ function PostDetailPage() {
         <Typography variant="h6" sx={{ mb: 2 }}>
           댓글 {comments.length}
         </Typography>
-        <CommentList comments={comments} currentUserId={user?.id} onDelete={handleDeleteComment} />
+        <CommentList
+          comments={comments}
+          currentUserId={user?.id}
+          onDelete={handleDeleteComment}
+          onReply={handleReplyComment}
+        />
         <Box sx={{ mt: 2 }}>
           <CommentForm onSubmit={handleAddComment} isSubmitting={isCommenting} />
         </Box>

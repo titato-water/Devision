@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 import { useAuth } from '../../hooks/useAuth.jsx';
+import NotificationBell from './NotificationBell.jsx';
 
 /**
  * Header 컴포넌트
@@ -50,10 +51,11 @@ function Header() {
         </Typography>
 
         {user ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 2 } }}>
             <Button component={RouterLink} to="/posts/new" variant="contained" size="small">
               글쓰기
             </Button>
+            <NotificationBell />
             <Button component={RouterLink} to="/mypage" color="inherit" size="small">
               {profile?.nickname ?? '마이페이지'}
             </Button>

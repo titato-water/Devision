@@ -10,6 +10,7 @@ import PostWritePage from './pages/PostWritePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import SignupPage from './pages/SignupPage.jsx';
 import MyPage from './pages/MyPage.jsx';
+import UserProfilePage from './pages/UserProfilePage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/posts/:id" element={<PostDetailPage />} />
+            <Route path="/users/:id" element={<UserProfilePage />} />
             <Route
               path="/posts/new"
               element={
